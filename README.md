@@ -51,6 +51,17 @@ Results from the real runs we've done are in [docs/hardware_results.md](docs/har
 
 `.env` is listed in `.gitignore`, so your key is never committed. Each finished run is saved to `ibm_results.json`, and the app shows the latest one right away when it starts, which is handy for demos. Queues can take minutes or hours, and you can close the page while you wait.
 
+## Notebook
+
+[`qubit_visualizer.ipynb`](qubit_visualizer.ipynb) runs H and X on the Aer simulator, shows their Bloch spheres, and plots the real `ibm_fez` results next to the ideal ones, with a short explanation at each step. It is saved with all outputs, so you can read it on GitHub without running anything.
+
+To run it yourself, install Jupyter into the same virtual environment, then open the notebook. You can also open it in VS Code.
+
+```bash
+.venv/bin/python -m pip install jupyter
+.venv/bin/jupyter notebook qubit_visualizer.ipynb
+```
+
 ## How it works
 
 Each press adds a gate to the history, and the app rebuilds a one-qubit Qiskit circuit from that history. The sphere and the probabilities come from the circuit's exact statevector. Measuring runs the same circuit on `AerSimulator`, so the bars show real sampling noise around the exact odds.
@@ -63,6 +74,9 @@ Each measurement starts again from the full circuit, so measuring doesn't collap
 | --- | --- |
 | `app.py` | The Streamlit app |
 | `content.py` | The text for each knowledge level, and the flashcards |
+| `qubit_visualizer.ipynb` | Notebook comparing simulator and real hardware results |
+| `docs/REQUIREMENTS.md` | Product, technical, flow, design, data and plan overview |
+| `docs/hardware_results.md` | Results from the real IBM runs |
 | `ibm_hardware.py` | Connects to IBM Quantum, submits jobs and saves results |
 | `.env.example` | Template for your IBM credentials |
 | `qiskit_preload.py` | Loads Qiskit on a long-lived thread to prevent a crash under Streamlit. Keep its import above the Qiskit imports in `app.py`. |

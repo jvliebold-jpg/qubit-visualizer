@@ -1,3 +1,7 @@
+[theme]
+# Larger root size: every rem-based size (text, captions, buttons, spacing) scales with it.
+baseFontSize = 18
+
 [theme.light]
 primaryColor = "#2a78d6"
 

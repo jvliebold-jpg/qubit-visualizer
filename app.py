@@ -55,10 +55,10 @@ PLAIN_LABELS = [(0, 0, 1.2, "0"), (0, 0, -1.2, "1")]
 DIRAC_LABELS = [
     (0, 0, 1.2, "|0⟩"),
     (0, 0, -1.2, "|1⟩"),
-    (1.22, 0, 0, "|+⟩"),
-    (-1.22, 0, 0, "|−⟩"),
-    (0, 1.22, 0, "|+i⟩"),
-    (0, -1.22, 0, "|−i⟩"),
+    (1.15, 0, 0, "|+⟩"),
+    (-1.15, 0, 0, "|−⟩"),
+    (0, 1.15, 0, "|+i⟩"),
+    (0, -1.15, 0, "|−i⟩"),
 ]
 
 
@@ -162,7 +162,7 @@ def bloch_figure(point, colors, labels):
         z=[label[2] for label in labels],
         mode="text",
         text=[label[3] for label in labels],
-        textfont={"color": colors["text"], "size": 15},
+        textfont={"color": colors["text"], "size": 18},
         hoverinfo="skip",
     )
 
@@ -207,7 +207,7 @@ def bloch_figure(point, colors, labels):
             "zaxis": hidden_axis,
             "aspectmode": "cube",
             "bgcolor": "rgba(0,0,0,0)",
-            "camera": {"eye": {"x": 1.2, "y": 0.72, "z": 0.36}},
+            "camera": {"eye": {"x": 1.3, "y": 0.78, "z": 0.39}},
         },
     )
     return figure
@@ -229,7 +229,7 @@ def probability_figure(series, colors, outcome_labels):
             marker={"color": color, "cornerradius": 4},
             text=[f"{p:.1%}" for p in probabilities],
             textposition="outside",
-            textfont={"color": colors["text"], "size": 14},
+            textfont={"color": colors["text"], "size": 16},
             cliponaxis=False,
             customdata=shots,
             hovertemplate=(
@@ -252,7 +252,7 @@ def probability_figure(series, colors, outcome_labels):
         bargroupgap=0.06,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font={"color": colors["muted"]},
+        font={"color": colors["muted"], "size": 14},
         yaxis={
             "title": "Probability",
             "automargin": True,
@@ -266,7 +266,7 @@ def probability_figure(series, colors, outcome_labels):
         xaxis={
             "type": "category",
             "automargin": True,
-            "tickfont": {"size": 15, "color": colors["text"]},
+            "tickfont": {"size": 17, "color": colors["text"]},
         },
     )
     return figure
@@ -488,6 +488,24 @@ def pending_job_panel(credentials):
 
 
 st.set_page_config(page_title="Qubit Visualizer", page_icon="⚛️", layout="wide")
+
+# Readability: taller buttons with bolder labels, explanations larger than Streamlit's
+# default caption size, and more room between sections.
+st.html(
+    """
+    <style>
+    .stButton button { min-height: 3rem; padding: 0.5rem 1.1rem; }
+    .stButton button p { font-size: 1.05rem; font-weight: 600; }
+    [data-testid="stCaptionContainer"] { font-size: 0.95rem; line-height: 1.6; }
+    [data-testid="stMarkdownContainer"] p { line-height: 1.6; }
+    hr { margin: 2.5rem 0 !important; }
+    /* Wide tables scroll inside their own box instead of the whole page on phones. */
+    [data-testid="stMarkdownContainer"] table { display: block; overflow-x: auto; }
+    /* Gate matrices must fit their narrow columns at the larger font size. */
+    [data-testid="stColumn"] .katex-display > .katex { font-size: 1em; }
+    </style>
+    """
+)
 
 st.session_state.setdefault("history", [])
 st.session_state.setdefault("counts", None)
