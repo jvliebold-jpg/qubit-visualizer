@@ -2,7 +2,7 @@
 
 An interactive way to learn how quantum gates work. Apply gates to a single qubit, watch its state move on a 3D Bloch sphere, then measure it on the Qiskit simulator.
 
-![Qubit Visualizer after applying H and T, showing the Bloch sphere and a measurement bar chart](docs/screenshot.png)
+![Qubit Visualizer at the Beginner level after applying H and T, showing the knowledge level switch, the qubit's arrow on a globe and a measurement bar chart](docs/screenshot.png)
 
 ## Features
 
@@ -10,7 +10,12 @@ An interactive way to learn how quantum gates work. Apply gates to a single qubi
 - **Bloch sphere:** an interactive 3D view you can rotate and zoom
 - **Gate history:** the gates applied so far, with a Reset button
 - **Measurement:** 1024 shots on the Qiskit Aer simulator, shown as a probability bar chart
-- **Explanations:** a short, beginner-friendly description under each gate
+- **Knowledge levels:** switch between three levels at the top of the page
+  - **Beginner:** everyday analogies with no math or notation, a "What is a qubit?" intro, and just the chances of 0 and 1
+  - **Intermediate:** Dirac notation, the state formula, and what each gate does to the arrow
+  - **Advanced:** the full complex state vector, gate matrices, Bloch angles θ and φ, shot-noise error bars, and hardware error sources (T1, T2, readout error)
+- **Flashcards:** at the Beginner and Intermediate levels, cards on six concepts and seven gates; flip a card to see the answer, and gate cards have "Try it" buttons
+- **Real hardware:** run the circuit on a real IBM quantum computer and compare it with the ideal result
 
 ## Run it
 
@@ -57,6 +62,7 @@ Each measurement starts again from the full circuit, so measuring doesn't collap
 | File | Purpose |
 | --- | --- |
 | `app.py` | The Streamlit app |
+| `content.py` | The text for each knowledge level, and the flashcards |
 | `ibm_hardware.py` | Connects to IBM Quantum, submits jobs and saves results |
 | `.env.example` | Template for your IBM credentials |
 | `qiskit_preload.py` | Loads Qiskit on a long-lived thread to prevent a crash under Streamlit. Keep its import above the Qiskit imports in `app.py`. |
