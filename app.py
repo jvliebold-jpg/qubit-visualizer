@@ -1,6 +1,7 @@
 """Qubit Visualizer: apply gates to one qubit and watch it move on the Bloch sphere."""
 
 import math
+from datetime import datetime, timezone
 
 import numpy as np
 import plotly.graph_objects as go
@@ -10,6 +11,8 @@ import qiskit_preload  # noqa: F401  Must stay above the qiskit imports.
 from qiskit import QuantumCircuit, transpile
 from qiskit.quantum_info import Pauli, Statevector
 from qiskit_aer import AerSimulator
+
+import ibm_hardware
 
 SHOTS = 1024
 
@@ -31,6 +34,7 @@ ROTATION_GATES = {
 # Chart colors, chosen separately for Streamlit's light and dark themes.
 LIGHT_COLORS = {
     "accent": "#2a78d6",
+    "accent2": "#eb6834",
     "text": "#0b0b0b",
     "muted": "#52514e",
     "line": "#b9b8b2",
@@ -38,6 +42,7 @@ LIGHT_COLORS = {
 }
 DARK_COLORS = {
     "accent": "#3987e5",
+    "accent2": "#d95926",
     "text": "#f0efec",
     "muted": "#c3c2b7",
     "line": "#5c5b56",
@@ -63,6 +68,12 @@ def bloch_vector(state):
 
 def gate_label(gate, degrees):
     return gate if degrees is None else f"{gate}({degrees}°)"
+
+
+def history_text(history):
+    if not history:
+        return "|0⟩ (no gates)"
+    return "|0⟩ → " + " → ".join(f"`{gate_label(*step)}`" for step in history)
 
 
 def format_amplitude(value):
@@ -179,29 +190,43 @@ def bloch_figure(point, colors):
     return figure
 
 
-def measurement_figure(counts, colors):
-    outcomes = ["0", "1"]
-    shots = [counts.get(outcome, 0) for outcome in outcomes]
-    probabilities = [count / SHOTS for count in shots]
-    figure = go.Figure(
-        go.Bar(
+def probability_figure(series, colors):
+    """Bar chart of measured probabilities. `series` is a list of (name, counts, color)."""
+    grouped = len(series) > 1
+    figure = go.Figure()
+    for name, counts, color in series:
+        shots = [counts.get(outcome, 0) for outcome in ("0", "1")]
+        total = sum(counts.values())
+        probabilities = [count / total for count in shots]
+        figure.add_bar(
+            name=name,
             x=["|0⟩", "|1⟩"],
             y=probabilities,
-            width=0.45,
-            marker={"color": colors["accent"], "cornerradius": 4},
+            width=None if grouped else 0.45,
+            marker={"color": color, "cornerradius": 4},
             text=[f"{p:.1%}" for p in probabilities],
             textposition="outside",
             textfont={"color": colors["text"], "size": 14},
             cliponaxis=False,
             customdata=shots,
             hovertemplate=(
-                f"%{{x}}: %{{customdata}} of {SHOTS} shots (%{{y:.1%}})<extra></extra>"
+                f"{name}<br>%{{x}}: %{{customdata}} of {total} shots (%{{y:.1%}})"
+                "<extra></extra>"
             ),
         )
-    )
     figure.update_layout(
-        height=300,
-        margin={"l": 8, "r": 8, "t": 28, "b": 24},
+        height=320 if grouped else 300,
+        margin={"l": 8, "r": 8, "t": 48 if grouped else 28, "b": 24},
+        showlegend=grouped,
+        legend={
+            "orientation": "h",
+            "x": 0,
+            "y": 1.02,
+            "yanchor": "bottom",
+            "font": {"color": colors["text"]},
+        },
+        bargap=0.3,
+        bargroupgap=0.06,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font={"color": colors["muted"]},
@@ -234,18 +259,110 @@ def reset():
     st.session_state.counts = None
 
 
-def measure():
-    circuit = build_circuit(st.session_state.history)
+def simulate(history):
+    circuit = build_circuit(history)
     circuit.measure_all()
     backend = simulator()
-    result = backend.run(transpile(circuit, backend), shots=SHOTS).result()
-    st.session_state.counts = result.get_counts()
+    return backend.run(transpile(circuit, backend), shots=SHOTS).result().get_counts()
+
+
+def measure():
+    st.session_state.counts = simulate(st.session_state.history)
+
+
+@st.cache_resource(show_spinner=False)
+def ibm_service(token, instance):
+    return ibm_hardware.connect(token, instance)
+
+
+def run_on_hardware(credentials):
+    history = list(st.session_state.history)
+    circuit = build_circuit(history)
+    circuit.measure_all()
+    job_id, backend = ibm_hardware.submit(ibm_service(*credentials), circuit, SHOTS)
+    store = ibm_hardware.load_store()
+    store["pending"] = {
+        "job_id": job_id,
+        "backend": backend,
+        "gates": history,
+        "shots": SHOTS,
+        "submitted_at": ibm_hardware.now(),
+        "ideal_counts": simulate(history),
+    }
+    ibm_hardware.save_store(store)
+
+
+def local_time(timestamp):
+    return datetime.fromisoformat(timestamp).astimezone().strftime("%b %d, %H:%M")
+
+
+JOB_STATUS_TEXT = {
+    "INITIALIZING": "IBM is preparing your job.",
+    "QUEUED": "Waiting in line for the quantum computer.",
+    "RUNNING": "Running on the quantum computer now.",
+}
+
+
+@st.fragment(run_every=15)
+def pending_job_panel(credentials):
+    """Check a submitted job every 15 seconds and save its result when it finishes."""
+    store = ibm_hardware.load_store()
+    pending = store["pending"]
+    if pending is None:
+        return
+    if credentials is None:
+        st.warning(
+            f"Job `{pending['job_id']}` is still open, but the IBM credentials are missing "
+            "from .env, so the app can't check on it."
+        )
+        return
+
+    try:
+        service = ibm_service(*credentials)
+        status, message = ibm_hardware.job_status(service, pending["job_id"])
+        if status == "DONE":
+            pending["real_counts"] = ibm_hardware.job_counts(service, pending["job_id"])
+    except Exception as error:
+        st.warning(f"Couldn't check the job status. Trying again in 15 seconds. ({error})")
+        return
+
+    if status in ibm_hardware.FINAL_STATUSES:
+        # Re-read the file: another open tab may have saved this job while we were checking.
+        store = ibm_hardware.load_store()
+        if (store["pending"] or {}).get("job_id") != pending["job_id"]:
+            st.rerun()
+        if status == "DONE":
+            pending["finished_at"] = ibm_hardware.now()
+            store["results"].append(pending)
+        else:
+            st.session_state.ibm_error = f"The job ended with status {status}. {message or ''}"
+        store["pending"] = None
+        ibm_hardware.save_store(store)
+        st.rerun()
+
+    waited = datetime.now(timezone.utc) - datetime.fromisoformat(pending["submitted_at"])
+    minutes = int(waited.total_seconds() // 60)
+    waited_text = "under a minute" if minutes == 0 else f"{minutes} min"
+    st.info(
+        f"**{status.title()}:** {JOB_STATUS_TEXT.get(status, '')}  \n"
+        f"`{pending['backend']}` · job `{pending['job_id']}` · "
+        f"waited {waited_text}. Checks again every 15 seconds."
+    )
+    if st.button("Cancel job"):
+        try:
+            ibm_hardware.cancel(service, pending["job_id"])
+        except Exception as error:
+            st.session_state.ibm_error = f"IBM didn't confirm the cancel: {error}"
+        store["pending"] = None
+        ibm_hardware.save_store(store)
+        st.rerun()
 
 
 st.set_page_config(page_title="Qubit Visualizer", page_icon="⚛️", layout="wide")
 
 st.session_state.setdefault("history", [])
 st.session_state.setdefault("counts", None)
+st.session_state.setdefault("ibm_error", None)
 
 colors = DARK_COLORS if st.context.theme.type == "dark" else LIGHT_COLORS
 
@@ -312,8 +429,7 @@ history_column, measure_column = st.columns([5, 6], gap="large")
 with history_column:
     st.subheader("Gate history")
     if history:
-        steps = " → ".join(f"`{gate_label(*step)}`" for step in history)
-        st.markdown(f"|0⟩ → {steps}")
+        st.markdown(history_text(history))
     else:
         st.caption("No gates yet. The qubit is in |0⟩.")
     st.button("Reset", on_click=reset, disabled=not history)
@@ -332,9 +448,84 @@ with measure_column:
             "Your circuit stays as it is, so you can keep adding gates afterwards."
         )
     else:
-        st.plotly_chart(measurement_figure(counts, colors), key="measurement", theme=None)
+        st.plotly_chart(
+            probability_figure([("Simulator", counts, colors["accent"])], colors),
+            key="measurement",
+            theme=None,
+        )
         st.caption(
             f"Exact odds: {prob_zero:.1%} for 0 and {prob_one:.1%} for 1. "
             "Real shots land near these but not exactly on them, so measuring again "
             "gives slightly different bars."
         )
+
+st.divider()
+
+hardware_column, comparison_column = st.columns([5, 6], gap="large")
+ibm_credentials = ibm_hardware.credentials()
+ibm_store = ibm_hardware.load_store()
+
+with hardware_column:
+    st.subheader("Real IBM quantum computer")
+    st.write(
+        "Send your circuit to a real quantum computer at IBM. The app picks the least "
+        f"busy one and runs {SHOTS} shots."
+    )
+    if ibm_credentials is None:
+        st.info(
+            "To turn this on, add your IBM Quantum API key and instance CRN to the "
+            "`.env` file in the project folder. The README explains how."
+        )
+    if st.button(
+        "Run on real IBM quantum computer",
+        type="primary",
+        disabled=ibm_credentials is None or ibm_store["pending"] is not None,
+    ):
+        st.session_state.ibm_error = None
+        try:
+            with st.spinner("Connecting to IBM Quantum and picking a computer..."):
+                run_on_hardware(ibm_credentials)
+        except Exception as error:
+            st.session_state.ibm_error = f"Couldn't submit the job: {error}"
+        st.rerun()
+    st.caption(
+        f"Runs the circuit in Gate history: {history_text(history)}. This uses a few "
+        "seconds of your IBM Quantum time. Waiting in the queue can take minutes or hours, "
+        "and you can close the page while you wait."
+    )
+    if st.session_state.ibm_error:
+        st.error(st.session_state.ibm_error)
+    pending_job_panel(ibm_credentials)
+
+with comparison_column:
+    results = ibm_store["results"]
+    if results:
+        last = results[-1]
+        st.markdown(
+            f"**Last real result** on `{last['backend']}` · {history_text(last['gates'])}"
+        )
+        st.plotly_chart(
+            probability_figure(
+                [
+                    ("Ideal (simulator)", last["ideal_counts"], colors["accent"]),
+                    (f"Real ({last['backend']})", last["real_counts"], colors["accent2"]),
+                ],
+                colors,
+            ),
+            key="hardware_comparison",
+            theme=None,
+        )
+        st.caption(
+            f"Finished {local_time(last['finished_at'])} · job `{last['job_id']}` · "
+            f"{len(results)} real run{'s' if len(results) != 1 else ''} saved in "
+            f"`{ibm_hardware.RESULTS_FILE.name}`"
+        )
+    else:
+        st.caption("No real results yet. Your first finished run will appear here.")
+    st.info(
+        "**Why don't the real bars match?** A real qubit is a tiny physical object that "
+        "picks up noise from its surroundings. It slowly loses its quantum state, which is "
+        "called decoherence. Its gates are slightly imperfect, and reading it out sometimes "
+        "mistakes a 0 for a 1. So real results land a few percent away from the ideal ones. "
+        "The simulator has none of these problems."
+    )

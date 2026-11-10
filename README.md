@@ -33,6 +33,19 @@ Streamlit prints a local address, usually http://localhost:8501. Open it in your
 3. Press **H** again, then **Measure**. The arrow is back at |0⟩, so every shot reads 0.
 4. Press **Reset**, then **Z**. The arrow stays put because it already lies on the Z axis.
 
+## Run on a real IBM quantum computer
+
+The app can send your circuit to the least busy real IBM quantum computer and show the result next to the ideal simulator result. You need a free [IBM Quantum Platform](https://quantum.cloud.ibm.com) account.
+
+1. Copy the template: `cp .env.example .env`
+2. On the IBM Quantum Platform dashboard, create an API key and paste it after `QISKIT_IBM_TOKEN=` in `.env`.
+3. On the Instances page, copy your instance's CRN (it starts with `crn:v1:`) and paste it after `QISKIT_IBM_INSTANCE=`.
+4. Press **Run on real IBM quantum computer** in the app. You don't need to restart it.
+
+Results from the real runs we've done are in [docs/hardware_results.md](docs/hardware_results.md).
+
+`.env` is listed in `.gitignore`, so your key is never committed. Each finished run is saved to `ibm_results.json`, and the app shows the latest one right away when it starts, which is handy for demos. Queues can take minutes or hours, and you can close the page while you wait.
+
 ## How it works
 
 Each press adds a gate to the history, and the app rebuilds a one-qubit Qiskit circuit from that history. The sphere and the probabilities come from the circuit's exact statevector. Measuring runs the same circuit on `AerSimulator`, so the bars show real sampling noise around the exact odds.
@@ -44,6 +57,8 @@ Each measurement starts again from the full circuit, so measuring doesn't collap
 | File | Purpose |
 | --- | --- |
 | `app.py` | The Streamlit app |
+| `ibm_hardware.py` | Connects to IBM Quantum, submits jobs and saves results |
+| `.env.example` | Template for your IBM credentials |
 | `qiskit_preload.py` | Loads Qiskit on a long-lived thread to prevent a crash under Streamlit. Keep its import above the Qiskit imports in `app.py`. |
 | `requirements.txt` | Pinned dependencies |
 | `.streamlit/config.toml` | Accent colors for the light and dark themes |

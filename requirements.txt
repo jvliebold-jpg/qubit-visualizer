@@ -1,5 +1,9 @@
 numpy==2.5.4
 plotly==7.1.0
+python-dotenv==1.2.4
 qiskit==2.6.2
 qiskit-aer==0.18.2
+qiskit-ibm-runtime==0.52.0
 streamlit==1.67.0
+# Newer cryptography releases have no prebuilt wheel for Intel Macs.
+cryptography==48.0.1
